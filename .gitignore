@@ -1,0 +1,7 @@
+.vscode/*
+error/*
+test/*
+output/*
+*.log
+*.o
+condor_*

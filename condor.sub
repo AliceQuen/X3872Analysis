@@ -1,0 +1,18 @@
+# Condor scrpit for ntuple process
+# This should only be used when the EP and AP shares the same file system
+executable		= runjobs.sh
+
+transfer_input_files	= runjobs.C, MYNTUPLE.C, MYNTUPLE.h
+#output                  = $(Process).o
+error                   = ERROR/$(Process).err
+should_transfer_files	= IF_NEEDED
+when_to_transfer_output	= ON_EXIT
+
+request_cpus		= 1
+request_memory		= 512M
+request_disk		= 256M
+
+max_retries		= 2
+queue arguments from (
+    LIST
+)

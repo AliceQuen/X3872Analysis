@@ -173,6 +173,12 @@ void DataP::Loop(TString outputname)
 		float Jpsi1_Pi2_DeltaR;
 		vars.push_back(&Jpsi1_Pi2_DeltaR);
 		SourceTree->Branch("Jpsi1_Pi2_DeltaR", &Jpsi1_Pi2_DeltaR);
+                float Psi2S_Pt;
+                vars.push_back(&Psi2S_Pt);
+                SourceTree->Branch("Psi2S_Pt", &Psi2S_Pt);
+                float Psi2S_Pz;
+                vars.push_back(&Psi2S_Pz);
+                SourceTree->Branch("Psi2S_Pz", &Psi2S_Pz);
 		float Psi2S_Eta;
 		vars.push_back(&Psi2S_Eta);
 		SourceTree->Branch("Psi2S_Eta", &Psi2S_Eta);
@@ -325,8 +331,8 @@ void DataP::Loop(TString outputname)
                         Jpsi1_mu2_DeltaR = Jpsi1_P4.DeltaR(mu2_P4);
                         Jpsi1_Pi1_DeltaR = Jpsi1_P4.DeltaR(Pi1_P4);
                         Jpsi1_Pi2_DeltaR = Jpsi1_P4.DeltaR(Pi2_P4);
-                        //Psi2S_Pt = Psi2S_P4.Pt();
-                        //Psi2S_Pz = Psi2S_P4.Pz();
+                        Psi2S_Pt = Psi2S_P4.Pt();
+                        Psi2S_Pz = Psi2S_P4.Pz();
                         Psi2S_Eta = std::abs(Psi2S_P4.Eta());
                         Psi2S_massErr = (*X_JPiPi_massErr)[l];
                         Psi2S_VtxProb = (*X_JPiPi_VtxProb)[l];

@@ -6,4 +6,5 @@ myntuple=$(find . -type f -name "*.h")
 myntuple=$(basename $myntuple)
 myntuple=${myntuple%.h}
 sed -i -e '1,$s/myntuple/'"$myntuple"'/g' runjobs.C
-root -e ".L runjobs.C" -e ".x runjobs(\"$1\", \"$2\", \"$3\")"
+root -e ".L runjobs.C" -e ".L DataP.C" -e "runjobs(\"$1\", \"$2\", \"$3\")"
+sed -i -e '1,$s/'"$myntuple"'/myntuple/g' runjobs.C

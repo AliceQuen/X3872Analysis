@@ -33,6 +33,8 @@
 #include "TSystem.h"
 #include "RooFitResult.h"
 
+#define NUM_CUT_ITEMS 3
+
 #include "CutOpt.C"
 std::vector<std::string> split(const std::string &str, const char delimiter = ',')
 {
@@ -49,18 +51,19 @@ class CutPoint
 {
 public:
     std::string year;
-    std::vector<std::string> cuts;
+    std::set<std::string> cuts;
     double merit;
     double efficiency;
 
 public:
     CutPoint(std::string line);
-    CutPoint(std::string year, std::vector<std::string> cuts_, double merit, double efficiency) : year(year), merit(merit), efficiency(efficiency)
+    CutPoint(std::string year, std::set<std::string> cuts_, double merit, double efficiency) : year(year), merit(merit), efficiency(efficiency)
     {
-        cuts.insert(cuts.end(), cuts_.begin(), cuts_.end());
+        cuts.insert(cuts_.begin(), cuts_.end());
     }
     CutPoint operator+(const CutPoint &other) const;
-
+    static std::vector<CutPoint> combine_points(std::vector<CutPoint> cuts1, std::vector<CutPoint> cuts2);
+    void print_cuts();
 };
 CutPoint::CutPoint(std::string line)
 {
@@ -71,12 +74,39 @@ CutPoint::CutPoint(std::string line)
     merit = std::stod(tokens[2]);
     efficiency = std::stod(tokens[3]);
     year = split(tokens[0], '/').back();
-    cuts = split(tokens[1], '&');
+    cuts.insert(tokens[1]);
 }
 CutPoint CutPoint::operator+(const CutPoint &other) const
 {
+    if (year != other.year)
+        throw std::runtime_error("Trying to combine cuts from different years!");
     return CutPoint(year, other.cuts, merit + other.merit, efficiency * other.efficiency);
 }
+std::vector<CutPoint> CutPoint::combine_points(std::vector<CutPoint> cuts1, std::vector<CutPoint> cuts2)
+{
+    std::vector<CutPoint> result;
+    for (auto &cut1 : cuts1)
+    {
+        for (auto &cut2 : cuts2)
+        {
+            if (cut1.cuts == cut2.cuts)
+                continue;
+            CutPoint combined = cut1 + cut2;
+            if (combined.efficiency >=1e3)
+                result.push_back(combined);
+        }
+    }
+    return result;
+}
+
+void CutPoint::print_cuts()
+{
+    for (const auto &cut : cuts)
+    {
+        std::cout << cut << std::endl;
+    }
+}
+
 void FindBestCut()
 {
     // Read from cut_optimization_results.txt, generate cutpoints
@@ -94,10 +124,26 @@ void FindBestCut()
         cutPointsByYear[cp.year].push_back(cp);
     }
     // For each year, find the best cut combination
-    for (const auto &entry : cutPointsByYear)
+    for (auto &entry : cutPointsByYear)
     {
-        const auto &year = entry.first;
-        const auto &points = entry.second;
-        
+        auto &year = entry.first;
+        auto &points = entry.second;
+        auto cuts = std::vector<CutPoint>(points);
+        auto &bestcuts = cuts;
+        auto it = std::remove_if(cuts.begin(), cuts.end(), [](CutPoint r)
+                                 { return r.efficiency < 1e3; });
+        cuts.erase(it, cuts.end());
+        if (!cuts.size()) bestcuts = points;
+        for (size_t i = 0; i < NUM_CUT_ITEMS; i++)
+        {
+            auto combined = cuts;
+            bestcuts = combined;
+            auto combined = CutPoint::combine_points(combined, cuts);
+            if (!combined.size())
+                break; 
+        }
+        std::cout << "best cut for " << year << " is " <<std::endl;
+        for (auto &p : bestcuts)
+            p.print_cuts();
     }
 }

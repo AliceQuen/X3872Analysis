@@ -34,6 +34,9 @@
 #include "RooFitResult.h"
 #include "DrawGraph.h"
 
+#define PSI2S_MASS_MIN 3.64
+#define PSI2S_MASS_MAX 3.73
+
 using namespace RooFit;
 using namespace RooStats;
 
@@ -71,7 +74,7 @@ Result Fit(Work work, bool isDraw = false)
 
     // signal config
     RooDataSet *data = work.data;
-    RooRealVar Psi2S_mass("Psi2S_mass", "Psi2S_mass", 3.64, 3.73);
+    RooRealVar Psi2S_mass("Psi2S_mass", "Psi2S_mass", PSI2S_MASS_MIN, PSI2S_MASS_MAX);
 
     RooRealVar mean("meanCB1_psi2s", "meanCB1_psi2s", 3.68619e+00, 3.68, 3.69);
     RooRealVar sigma1 = RooRealVar("sigma1", "sigma1", 6.27649e-03, 0.0, 0.06);
@@ -99,13 +102,16 @@ Result Fit(Work work, bool isDraw = false)
     unsigned int ii = 0;
     while (true)
     {
-
         fitRes = totalPdf.fitTo(*data, Hesse(kTRUE), NumCPU(8), Save(kTRUE), Minos(kFALSE), PrintLevel(-1), Warnings(kFALSE), PrintEvalErrors(-1));
         Data_edm = fitRes->edm();
         Data_status = fitRes->status();
         Data_covQual = fitRes->covQual();
+        if (isDraw)
+        {
+            std::cout << Data_edm << " " <<  Data_status << " " << Data_covQual << std::endl;
+        }
         ii = ii + 1;
-        if ((Data_edm < 0.01 && Data_status == 0 && Data_covQual == 3) || ii >= 20)
+        if ((Data_edm < 0.01 && Data_status == 0 && Data_covQual == 3) || ii >= 2)
             break;
         delete fitRes;
     }
@@ -178,14 +184,15 @@ void TestFit(TString path, TString variable, double min, double max)
 {
     TChain SourceTree("SourceTree", "");
     SourceTree.Add(path + "/*.root");
-    RooRealVar Psi2S_mass("Psi2S_mass", "M(#mu#mu#pi#pi)-M(#mu#mu)+3.0969 GeV", 3.64, 3.73);
+    RooRealVar Psi2S_mass("Psi2S_mass", "M(#mu#mu#pi#pi)-M(#mu#mu)+3.0969 GeV", PSI2S_MASS_MIN, PSI2S_MASS_MAX);
     RooRealVar roovar(variable, variable, min, max);
     RooArgSet variables;
     variables.add(Psi2S_mass);
     variables.add(roovar);
     RooDataSet *data = new RooDataSet("data", "Psi2S_mass", variables, RooFit::Import(SourceTree));
     Work work = {min + (max - min) / 2, data};
-    Fit(work, true);
+    auto result = Fit(work, true);
+    std::cout << "Merit: " << result.merit << " Efficiency: " << result.n / SourceTree.GetEntries() << std::endl;  
 }
 void CutOpt(TString path, TString variable)
 {
@@ -201,7 +208,7 @@ void CutOpt(TString path, TString variable)
     // True change minimum, False change upper limit
     bool min_or_max = (hists.first->GetMean() - hists.second->GetMean() > 0);
     // Step 2: Fitting
-    RooRealVar Psi2S_mass("Psi2S_mass", "M(#mu#mu#pi#pi)-M(#mu#mu)+3.0969 GeV", 3.64, 3.73);
+    RooRealVar Psi2S_mass("Psi2S_mass", "M(#mu#mu#pi#pi)-M(#mu#mu)+3.0969 GeV", PSI2S_MASS_MIN, PSI2S_MASS_MAX);
     RooRealVar roovar(variable, variable, min, max);
     RooArgSet variables;
     variables.add(Psi2S_mass);
@@ -210,7 +217,7 @@ void CutOpt(TString path, TString variable)
     ROOT::TProcessExecutor pool;
     // Varying maximum
     std::vector<Work> works;
-    double x = 10.0; // number of points to test on each side
+    double x = 100.0; // number of points to test on each side
     double d = (max - min) / x;
     if (min_or_max)
     {

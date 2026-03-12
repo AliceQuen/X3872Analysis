@@ -7,10 +7,12 @@ void runjobs(TString inputpath, TString outputdir, TString outname)
 {
 	TChain *chain = new TChain("mkcands/X_data", "");
 	chain->Add(inputpath);
+	if (!chain->GetEntries())
+		throw std::runtime_error("No entires read from the files!");
 	myntuple a(chain);
 	TString out = outputdir + "/" + outname + ".root";
 	a.Loop(out);
-    // Delete everything to save memory
+	// Delete everything to save memory
 	a.~myntuple();
 	delete chain;
 }

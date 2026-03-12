@@ -46,7 +46,7 @@ if mode == 'submit':
     for job in jobs:
         for variable in variables:
             job.rsplit('/')
-            arguments.append(f'\t{prifix}/{job} {variable}\n')
+            arguments.append(f'\t{prifix}/output/DATA/{job} {variable}\n')
     with open(f'condor_cutopt.sub', 'r') as f:
         lines = f.readlines()
     idx = lines.index('    LIST\n')

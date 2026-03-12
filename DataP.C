@@ -270,7 +270,7 @@ void DataP::Loop(TString outputname)
                         if ((*muJpsiFilterRes)[(*X_mu2Id)[l]]) filter++;
                         if ((*muJpsiFilterRes)[(*X_mu3Id)[l]]) filter++;
                         if ((*muJpsiFilterRes)[(*X_mu4Id)[l]]) filter++;
-                        if (filter < 2) continue;
+                        //if (filter < 2) continue;
                         // Fill Tree
                         // Prepare Lorentz Vectors
                         TLorentzVector mu1_P4, mu2_P4, mu3_P4, mu4_P4, Pi1_P4, Pi2_P4;

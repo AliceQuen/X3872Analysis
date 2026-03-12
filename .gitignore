@@ -5,4 +5,7 @@ output/*
 *.log
 *.o
 *.pdf
-condor_*
+*.png
+condor_DATA.sub
+cut_optimization_results.txt
+do_cutopt.sub

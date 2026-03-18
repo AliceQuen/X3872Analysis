@@ -1,5 +1,6 @@
 #include <vector>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <dirent.h>
 #include <functional>
@@ -33,9 +34,10 @@
 #include "TSystem.h"
 #include "RooFitResult.h"
 #include "DrawGraph.h"
+#include "FindBestCut.C"
 
-#define PSI2S_MASS_MIN 3.64
-#define PSI2S_MASS_MAX 3.73
+#define PSI2S_MASS_MIN 3.6
+#define PSI2S_MASS_MAX 3.76
 
 using namespace RooFit;
 using namespace RooStats;
@@ -50,6 +52,7 @@ struct Result
     double cut;
     double merit;
     double n;
+    unsigned int fit;
 };
 ROOT::TThreadedObjectUtils::MergeFunctionType<std::vector<float>> MergeVectors = [](std::shared_ptr<std::vector<float>> target, std::vector<std::shared_ptr<std::vector<float>>> &objs)
 {
@@ -71,10 +74,10 @@ Result Fit(Work work, bool isDraw = false)
     // Set signal and background PDF and paramiters
     // signal: double gaussian mixing
     // background: 2th order Chebychev for Jpsi and 3th order Chebychev for Psi2s
-
-    // signal config
     RooDataSet *data = work.data;
     RooRealVar Psi2S_mass("Psi2S_mass", "Psi2S_mass", PSI2S_MASS_MIN, PSI2S_MASS_MAX);
+
+    // signal config
 
     RooRealVar mean("meanCB1_psi2s", "meanCB1_psi2s", 3.68619e+00, 3.68, 3.69);
     RooRealVar sigma1 = RooRealVar("sigma1", "sigma1", 6.27649e-03, 0.0, 0.06);
@@ -89,7 +92,7 @@ Result Fit(Work work, bool isDraw = false)
     RooRealVar c1_bkg("c1_bkg", "c1_bkg", 2.24023e-01, -0.8, 0.8);
     RooRealVar c2_bkg("c2_bkg", "c2_bkg", -1.64660e-02, -0.6, 0.6);
     RooRealVar c3_bkg("c3_bkg", "c3_bkg", 1.18262e-02, -0.07, 0.07);
-    RooChebychev bkgPdf("bkg", "bkg", Psi2S_mass, RooArgList(c1_bkg, c2_bkg, c3_bkg));
+    RooChebychev bkgPdf("bkgPdf", "bkgPdf", Psi2S_mass, RooArgList(c1_bkg, c2_bkg, c3_bkg));
 
     // Fraction of psi2s and bkg, also total event numbers of each
     RooRealVar n_sig("n_sig", "n_sig", 1, 0, 1000000);
@@ -108,12 +111,16 @@ Result Fit(Work work, bool isDraw = false)
         Data_covQual = fitRes->covQual();
         if (isDraw)
         {
-            std::cout << Data_edm << " " <<  Data_status << " " << Data_covQual << std::endl;
+            std::cout << ii << " " << Data_edm << " " << Data_status << " " << Data_covQual << std::endl;
         }
         ii = ii + 1;
-        if ((Data_edm < 0.01 && Data_status == 0 && Data_covQual == 3) || ii >= 2)
+        if ((Data_edm < 0.01 && Data_status == 0 && Data_covQual == 3) || ii >= 10)
             break;
         delete fitRes;
+    }
+    if (isDraw)
+    {
+        std::cout << "at last we have " << ii << " " << Data_edm << " " << Data_status << " " << Data_covQual << std::endl;
     }
     Psi2S_mass.setRange("massPeak", 3.68, 3.69);
 
@@ -143,14 +150,63 @@ Result Fit(Work work, bool isDraw = false)
         c.SaveAs("fit_result.png");
     }
 
-    Result r = {work.cut, m, data->sumEntries()};
+    Result r = {work.cut, m, data->sumEntries(), ii};
     delete data, fitRes;
     return r;
+}
+inline double Midian(std::vector<double> &nums)
+{
+    std::sort(nums.begin(), nums.end());
+    auto size = nums.size();
+    if (!size)
+        throw std::runtime_error("Trying to find midian for an empty vector");
+    if (size % 2 != 0)
+    {
+        return nums.at(size / 2);
+    }
+    else
+    {
+        return (nums.at(size / 2 - 1) + nums.at(size / 2)) / 2.0;
+    }
+}
+template <class get>
+double MidianAbsoluteDiff(unsigned int n, unsigned int i, unsigned int k, get p)
+{
+    // return the origin value if can't do the averaging
+    if (k % 2 == 0 || k >= n || k == 1)
+        return p(i);
+
+    int k1 = (k - 1) / 2;
+    std::vector<double> m;
+    for (unsigned int j = 0; j <= k1; j++)
+    {
+        m.push_back(p(i - j));
+        if (!(i - j))
+            break;
+    }
+    for (unsigned int j = 0; j <= k1; j++)
+    {
+        if (j != 0)
+            m.push_back(p(i + j));
+        if ((i + j) == n - 1)
+            break;
+    }
+    double mid = Midian(m);
+    std::vector<double> ad;
+    for (auto mi : m)
+        ad.push_back(fabs(mi - mid));
+    std::sort(ad.begin(), ad.end());
+    double mad = Midian(ad);
+    double x = p(i);
+    if (x < mid - 4 * mad || x > mid + 4 * mad)
+        return mid;
+    else
+        return x;
 }
 template <class get>
 double SavitzkyGolay(unsigned int n, unsigned int i, unsigned int k, get p)
 {
-    if (k % 2 == 0 || k >= n || k == 1)
+    if (k % 2 == 0 || k >= n || k < 5)
         return p(i);
     int k1 = (k - 1) / 2;
     if (i < k1 || i > n - k1 - 1)
@@ -167,66 +223,84 @@ double SavitzkyGolay(unsigned int n, unsigned int i, unsigned int k, get p)
 Result &FindBestCut(std::vector<Result> &result)
 {
     auto it = std::remove_if(result.begin(), result.end(), [](Result r)
-                             { return (r.merit <= 0.8 || r.merit > 1e4); });
+                             { return (r.merit <= 0.8 || r.merit > 160); });
     result.erase(it, result.end());
     std::sort(result.begin(), result.end(), [](Result a, Result b)
               { return a.cut < b.cut; });
     std::vector<double> merit;
     unsigned int n = result.size();
     for (auto o = 0; o < n; o++)
-        merit.push_back(SavitzkyGolay(n, o, 9, [&result](unsigned int t) -> double
-                                      { return result.at(t).merit; }));
+        merit.push_back(MidianAbsoluteDiff(n, o, 9, [&result](unsigned int t) -> double
+                                           { return result.at(t).merit; }));
+    for (auto o = 0; o < n; o++)
+        merit.at(o) = (SavitzkyGolay(n, o, 9, [&merit](unsigned int t) -> double
+                                     { return merit.at(t); }));
     auto maxIt = std::max_element(merit.begin(), merit.end());
     unsigned int index = std::distance(merit.begin(), maxIt);
+    for (auto o = 0; o < n; o++)
+        result.at(o).merit = merit.at(o);
     return result.at(index);
 }
-void TestFit(TString path, TString variable, double min, double max)
+void TestFit(TString path, std::string cut)
 {
     TChain SourceTree("SourceTree", "");
     SourceTree.Add(path + "/*.root");
-    RooRealVar Psi2S_mass("Psi2S_mass", "M(#mu#mu#pi#pi)-M(#mu#mu)+3.0969 GeV", PSI2S_MASS_MIN, PSI2S_MASS_MAX);
-    RooRealVar roovar(variable, variable, min, max);
-    RooArgSet variables;
-    variables.add(Psi2S_mass);
-    variables.add(roovar);
-    RooDataSet *data = new RooDataSet("data", "Psi2S_mass", variables, RooFit::Import(SourceTree));
-    Work work = {min + (max - min) / 2, data};
+
+    auto start = std::chrono::high_resolution_clock::now();
+    CutPoint c(cut, false);
+    auto data = c.CuttedData(SourceTree);
+    Work work = {2, data};
     auto result = Fit(work, true);
-    std::cout << "Merit: " << result.merit << " Efficiency: " << result.n / SourceTree.GetEntries() << std::endl;  
+    std::cout << "Merit: " << result.merit << " Efficiency: " << result.n / SourceTree.GetEntries() << " Fitted for " << result.fit << std::endl;
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    std::cout << "We are testint Total time taken: " << elapsed.count() << " seconds" << std::endl;
 }
 void CutOpt(TString path, TString variable)
 {
     // Load ROOT files and set up multithreading
     auto start = std::chrono::high_resolution_clock::now();
-    auto pair = GetTree(path);
+    TChain SourceTree("SourceTree", "");
+    SourceTree.Add(path + "/*.root");
+    unsigned int entries = SourceTree.GetEntries();
+    if (entries == 0)
+        throw std::runtime_error("No ROOT files found in the specified path: ");
+    auto tp = GetTree(SourceTree);
     // Step 1: Find the range of the variable and determine whether to optimize minimum or maximum cut
     // Automatically determine histogram varible range, [mu - 3*sigma, mu + 3*sigma], if min == max
-    auto range = AutoRange(pair, variable);
+    auto range = AutoRange(tp, variable, [](float a)
+                           { return (PSI2S_MASS_MIN <= a && a <= PSI2S_MASS_MAX); });
     double min = range.first;
     double max = range.second;
-    auto hists = DrawSideBand(pair, variable, variable, min, max);
+    auto hs_side_band = DrawSideBand(tp, variable, variable, min, max);
+    auto h_psi2s_mass = DrawGraph(tp, variable, variable, PSI2S_MASS_MIN, PSI2S_MASS_MAX, 500, [](float a)
+                                  { return (PSI2S_MASS_MIN <= a && a <= PSI2S_MASS_MAX); });
+    auto total = h_psi2s_mass->GetEntries();
     // True change minimum, False change upper limit
-    bool min_or_max = (hists.first->GetMean() - hists.second->GetMean() > 0);
+    bool min_or_max = (hs_side_band.first->GetMean() - hs_side_band.second->GetMean() > 0);
+
     // Step 2: Fitting
     RooRealVar Psi2S_mass("Psi2S_mass", "M(#mu#mu#pi#pi)-M(#mu#mu)+3.0969 GeV", PSI2S_MASS_MIN, PSI2S_MASS_MAX);
-    RooRealVar roovar(variable, variable, min, max);
+    RooRealVar roovar(variable, variable, -std::numeric_limits<double>::max(), std::numeric_limits<double>::max());
     RooArgSet variables;
     variables.add(Psi2S_mass);
     variables.add(roovar);
-    RooDataSet *data = new RooDataSet("data", "Psi2S_mass", variables, RooFit::Import(*pair.second));
+    RooDataSet *data = new RooDataSet("data", "Psi2S_mass", variables, RooFit::Import(SourceTree));
     ROOT::TProcessExecutor pool;
     // Varying maximum
     std::vector<Work> works;
-    double x = 100.0; // number of points to test on each side
+    double x = 100; // number of points to test on each side
     double d = (max - min) / x;
     if (min_or_max)
     {
         // Varying minimum
         for (auto i = 1; i <= x; i++)
         {
-            roovar.setRange(max - d * i, max);
+            // roovar.setRange(max - d * i, max);
+            TString cut = variable + ">" + TString(std::to_string(max - d * i));
             std::string name = "Psi2S_mass_min_" + std::to_string(i);
-            RooDataSet *data_ = new RooDataSet(name.c_str(), "Psi2S_mass", variables, RooFit::Import(*data));
+            RooDataSet *data_ = new RooDataSet(name.c_str(), "Psi2S_mass", variables, RooFit::Cut(cut), RooFit::Import(*data));
             works.push_back({max - d * i, data_});
         }
     }
@@ -235,32 +309,32 @@ void CutOpt(TString path, TString variable)
         // Varying maximum
         for (auto i = 1; i <= x; i++)
         {
-            roovar.setRange(min, min + d * i);
+            // roovar.setRange(min, min + d * i);
+            TString cut = variable + "<" + TString(std::to_string(min + d * i));
             std::string name = "Psi2S_mass_min_" + std::to_string(i);
-            RooDataSet *data_ = new RooDataSet(name.c_str(), "Psi2S_mass", variables, RooFit::Import(*data));
+            RooDataSet *data_ = new RooDataSet(name.c_str(), "Psi2S_mass", variables, RooFit::Cut(cut), RooFit::Import(*data));
             works.push_back({min + d * i, data_});
         }
     }
     auto results = pool.Map([](Work work) -> Result
                             { return Fit(work); }, works);
+
     auto report = FindBestCut(results);
     works.clear();
     // Step 3: Output
     std::ofstream out;
-    std::cout << results.size() << std::endl;
+
     out.open("/home/storage0/users/junkaiqin/X3872Analysis/cut_optimization_results.txt", std::ios::out | std::ios::app);
-    // out << "path,variable,cut,merit,efficiency" << std::endl;
     std::string cut;
-    std::string v = std::string(variable);
     if (min_or_max)
     {
-        cut = std::to_string(report.cut) + std::string("<") + v + std::string("<") + std::to_string(max);
+        cut = TString(std::to_string(report.cut)) + "<" + variable;
     }
     else
     {
-        cut = std::to_string(min) + std::string("<") + v + std::string("<") + std::to_string(report.cut);
+        cut = TString(std::to_string(report.cut)) + ">" + variable;
     }
-    out << path << "," << cut << "," << report.merit << "," << report.n / pair.second->GetEntries() << std::endl;
+    out << path << "," << cut << "," << report.merit << "," << report.n / total << std::endl;
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
     std::cout << "Total time taken: " << elapsed.count() << " seconds" << std::endl;

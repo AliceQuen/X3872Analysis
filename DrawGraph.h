@@ -46,36 +46,58 @@ ROOT::TThreadedObjectUtils::MergeFunctionType<double> MergeDoubles = [](std::sha
         }
     }
 };
-// Tree and its multi-thread reader
-using tree_pair = std::pair<ROOT::TTreeProcessorMT *, TChain *>;
-tree_pair GetTree(TString path)
+ROOT::TThreadedObjectUtils::MergeFunctionType<unsigned int> MergeInts = [](std::shared_ptr<unsigned int> target, std::vector<std::shared_ptr<unsigned int>> &objs)
 {
-
-    TChain *SourceTree = new TChain("SourceTree", "");
-    SourceTree->Add(path + "/*.root");
-    unsigned int entries = SourceTree->GetEntries();
-    if (entries == 0)
-        throw std::runtime_error("No ROOT files found in the specified path: ");
+    unsigned int sum = 0.0;
+    for (auto &obj : objs)
+    {
+        if (obj && obj != target)
+        {
+            // if (obj) {
+            *target += *obj;
+        }
+    }
+};
+struct Average
+{
+    double min;
+    double max;
+    double mean;
+    double sigma;
+    unsigned int n;
+};
+ROOT::TTreeProcessorMT *GetTree(TChain &tree)
+{
     int nthreads = std::thread::hardware_concurrency();
     void EnableThreadSafety();
     ROOT::EnableImplicitMT(nthreads);
-    return std::make_pair(new ROOT::TTreeProcessorMT(*SourceTree), SourceTree);
+    return new ROOT::TTreeProcessorMT(tree);
 }
-std::pair<float, float> AutoRange(tree_pair pair, TString variable, std::function<bool(float)> selection = [](double)
-                                                                    { return true; })
+ROOT::TTreeProcessorMT *GetTree(TString path)
+{
+    TChain SourceTree("SourceTree", "");
+    SourceTree.Add(path + "/*.root");
+    unsigned int entries = SourceTree.GetEntries();
+    if (entries == 0)
+        throw std::runtime_error("No ROOT files found in the specified path: ");
+    return GetTree(SourceTree);
+}
+Average Statics(ROOT::TTreeProcessorMT *tp, TString variable, std::function<bool(float)> selection = [](double)
+                                                              { return true; })
 {
     ROOT::TThreadedObject<double> sum;
     ROOT::TThreadedObject<double> sum2;
     ROOT::TThreadedObject<double> min;
     ROOT::TThreadedObject<double> max;
+    ROOT::TThreadedObject<unsigned int> n;
     // Calculate the sum x and x^2 in parallel, x = variable, then calculate mean and sigma
     // This calcualtion introduce some float precision error, but it is acceptable for histogram range estimation
     // Automatically determine histogram varible range, [mu - 3*sigma, mu + 3*sigma] intersection [min_data, max_data], if min == max
-    unsigned int entries = pair.second->GetEntries();
-    auto calculateSum = [&selection, &sum, &sum2, &min, &max, &variable](TTreeReader &reader)
+    auto calculateSum = [&selection, &sum, &sum2, &min, &max, &n, &variable](TTreeReader &reader)
     {
         TTreeReaderValue<float> var(reader, variable);
         TTreeReaderValue<float> Psi2s_mass(reader, "Psi2S_mass");
+        unsigned int local_n = 0;
         double local_sum = 0.0;
         double local_sum2 = 0.0;
         double local_min = 0.0;
@@ -86,6 +108,7 @@ std::pair<float, float> AutoRange(tree_pair pair, TString variable, std::functio
             {
                 local_sum += *var;
                 local_sum2 += (*var) * (*var);
+                local_n++;
                 if (*var > local_max)
                     local_max = *var;
                 if (*var < local_min)
@@ -96,10 +119,12 @@ std::pair<float, float> AutoRange(tree_pair pair, TString variable, std::functio
         *(sum2.Get()).get() = local_sum2;
         *(max.Get()).get() = local_max;
         *(min.Get()).get() = local_min;
+        *(n.Get()).get() = local_n;
     };
-    pair.first->Process(calculateSum);
-    double mean = *(sum.Merge(MergeDoubles)).get() / entries;
-    double sigma = sqrt(*(sum2.Merge(MergeDoubles)).get() / entries - mean * mean);
+    tp->Process(calculateSum);
+    unsigned int n_merge = *(n.Merge(MergeInts)).get();
+    double mean = *(sum.Merge(MergeDoubles)).get() / n_merge;
+    double sigma = sqrt(*(sum2.Merge(MergeDoubles)).get() / n_merge - mean * mean);
     double max_ = 0.0;
     double min_ = 0.0;
     for (unsigned int i = 0; i < max.GetNSlots(); i++)
@@ -117,20 +142,26 @@ std::pair<float, float> AutoRange(tree_pair pair, TString variable, std::functio
                 min_ = *i_min;
         }
     }
-    std::cout << min_ << " " << max_ << std::endl;
-    return std::make_pair(std::max(mean - 3 * sigma, min_), std::min(mean + 3 * sigma, max_));
+    Average result = {min_, max_, mean, sigma, n_merge};
+    return result;
+}
+std::pair<double, double> AutoRange(ROOT::TTreeProcessorMT *tp, TString variable, std::function<bool(float)> selection = [](double)
+                                                                                  { return true; })
+{
+    auto st = Statics(tp, variable, selection);
+    return std::make_pair(std::max(st.mean - 3 * st.sigma, st.min), std::min(st.mean + 3 * st.sigma, st.max));
 };
-std::shared_ptr<TH1F> DrawGraph(tree_pair pair, TString variable, TString title, float min, float max, unsigned int bin = 100, std::function<bool(float)> selection = [](double)
-                                                                                                                               { return true; })
+std::shared_ptr<TH1F> DrawGraph(ROOT::TTreeProcessorMT *tp, TString variable, TString title, float min, float max, unsigned int bin = 100, std::function<bool(float)> selection = [](double)
+                                                                                                                                           { return true; })
 {
     auto start = std::chrono::high_resolution_clock::now();
     float max_x = max;
     float min_x = min;
-    ROOT::TTreeProcessorMT *tp = pair.first;
+    ;
     // Automatically determine histogram varible range, [mu - 3*sigma, mu + 3*sigma], if min == max
     if (min == max)
     {
-        auto range = AutoRange(pair, variable, selection);
+        auto range = AutoRange(tp, variable, selection);
         min_x = range.first;
         max_x = range.second;
     }
@@ -158,23 +189,23 @@ std::shared_ptr<TH1F> DrawGraph(tree_pair pair, TString variable, TString title,
 std::shared_ptr<TH1F> DrawGraph(TString path, TString variable, TString title, float min, float max, unsigned int bin = 100, std::function<bool(float)> selection = [](double)
                                                                                                                              { return true; })
 {
-    auto pair = GetTree(path);
-    auto result = DrawGraph(pair, variable, title, min, max, bin, selection);
-    delete pair.first;
+    auto tp = GetTree(path);
+    auto result = DrawGraph(tp, variable, title, min, max, bin, selection);
+    delete tp;
     return result;
 }
-std::pair<std::shared_ptr<TH1F>, std::shared_ptr<TH1F>> DrawSideBand(tree_pair pair, TString variable, TString title, float min, float max, unsigned int bin = 100)
+std::pair<std::shared_ptr<TH1F>, std::shared_ptr<TH1F>> DrawSideBand(ROOT::TTreeProcessorMT *tp, TString variable, TString title, float min, float max, unsigned int bin = 100)
 {
     float min_x = min;
     float max_x = max;
     if (min == max)
     {
-        auto range = AutoRange(pair, variable);
+        auto range = AutoRange(tp, variable);
         min_x = range.first;
         max_x = range.second;
     }
-    auto hist_side = DrawGraph(pair, variable, title, min_x, max_x, bin, SideBandSelection);
-    auto hist_peak = DrawGraph(pair, variable, title, min_x, max_x, bin, PeakSelection);
+    auto hist_side = DrawGraph(tp, variable, title, min_x, max_x, bin, SideBandSelection);
+    auto hist_peak = DrawGraph(tp, variable, title, min_x, max_x, bin, PeakSelection);
     double scale = (PEAK_UP - PEAK_DOWN) / ((SIDE_BAND_UP_L - SIDE_BAND_DOWN_L) + (SIDE_BAND_UP_R - SIDE_BAND_DOWN_R));
     hist_peak->Add(hist_peak.get(), hist_side.get(), 1, -scale);
     for (unsigned int i = 0; i < bin; i++)
@@ -190,9 +221,9 @@ std::pair<std::shared_ptr<TH1F>, std::shared_ptr<TH1F>> DrawSideBand(tree_pair p
 }
 std::pair<std::shared_ptr<TH1F>, std::shared_ptr<TH1F>> DrawSideBand(TString path, TString variable, TString title, float min, float max, unsigned int bin = 100)
 {
-    auto pair = GetTree(path);
-    auto result = DrawSideBand(pair, variable, title, min, max, bin);
-    delete pair.first;
+    auto tp = GetTree(path);
+    auto result = DrawSideBand(tp, variable, title, min, max, bin);
+    delete tp;
     return result;
 }
 void DrawSideBandAsPdf(TString path, TString variable, TString title, float min, float max, unsigned int bin = 100)
@@ -212,9 +243,10 @@ void DrawSideBandAsPdf(TString path, TString variable, TString title, float min,
     c1->SaveAs(variable + ".pdf");
 }
 // Simply draw a variable and save it as a pdf
-void DrawAsPdf(TString path, TString variable, TString title, float min, float max, unsigned int bin = 100)
+void DrawAsPdf(TString path, TString variable, TString title, float min, float max, unsigned int bin = 100, std::function<bool(float)> selection = [](double)
+                                                                                  { return true; })
 {
-    auto g = DrawGraph(path, variable, title, min, max, bin);
+    auto g = DrawGraph(path, variable, title, min, max, bin, selection);
     TCanvas *c1 = new TCanvas("c1", variable, 800, 600);
     g->Draw("HIST");
     c1->SaveAs(variable + ".pdf");

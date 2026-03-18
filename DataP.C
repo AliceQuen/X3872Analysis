@@ -16,6 +16,8 @@
 #define PI_MASS 0.139570
 #define JPSI_MASS 3.096900
 #define PSI2S_MASS 3.68610
+#define PSI2S_MASS_MIN 3.6
+#define PSI2S_MASS_MAX 3.76
 using namespace std;
 void DataP::Loop(TString outputname)
 {
@@ -62,6 +64,9 @@ void DataP::Loop(TString outputname)
 		float Psi2S_mass;
 		vars.push_back(&Psi2S_mass);
 		SourceTree->Branch("Psi2S_mass", &Psi2S_mass);
+                float Jpsi1_mass;
+		vars.push_back(&Jpsi1_mass);
+		SourceTree->Branch("Jpsi1_mass", &Jpsi1_mass);
 		float Jpsi2_mass;
 		vars.push_back(&Jpsi2_mass);
 		SourceTree->Branch("Jpsi2_mass", &Jpsi2_mass);
@@ -294,14 +299,17 @@ void DataP::Loop(TString outputname)
                         // PHYSICS
                         TMVA_Mark = 1;
                         Psi2S_mass = (Jpsi1_P4 + Pi1_P4 + Pi2_P4).M() - Jpsi1_P4.M() + JPSI_MASS;
+                        if (!(PSI2S_MASS_MIN <= Psi2S_mass && Psi2S_mass <= PSI2S_MASS_MAX))
+                                continue;
+                        Jpsi1_mass = Jpsi1_P4.M();
                         Jpsi2_mass = Jpsi2_P4.M();
                         X_mass_Fit = (*X_mass)[l];
                         X_mass_P4 = (Psi2S_P4 + Jpsi2_P4).M() - Jpsi2_P4.M() + JPSI_MASS;
                         X_VtxProb_ = (*X_VtxProb)[l];
                         mu1_Pt = mu1_P4.Pt();
                         mu2_Pt = mu2_P4.Pt();
-                        mu1_Pz = mu1_P4.Pz();
-                        mu2_Pz = mu2_P4.Pz();
+                        mu1_Pz = fabs(mu1_P4.Pz());
+                        mu2_Pz = fabs(mu2_P4.Pz());
                         mu1_Eta = std::abs(mu1_P4.Eta());
                         mu2_Eta = std::abs(mu2_P4.Eta());
                         mu1_mu2_DeltaR = mu1_P4.DeltaR(mu2_P4);
@@ -313,8 +321,8 @@ void DataP::Loop(TString outputname)
                         n_Medium_mu = (*muIsPatMediumMuon)[(*X_mu1Id)[l]] + (*muIsPatMediumMuon)[(*X_mu2Id)[l]] + (*muIsPatMediumMuon)[(*X_mu3Id)[l]] + (*muIsPatMediumMuon)[(*X_mu4Id)[l]];
                         Pi1_Pt = Pi1_P4.Pt();
                         Pi2_Pt = Pi2_P4.Pt();
-                        Pi1_Pz = Pi1_P4.Pz();
-                        Pi2_Pz = Pi2_P4.Pz();
+                        Pi1_Pz = fabs(Pi1_P4.Pz());
+                        Pi2_Pz = fabs(Pi2_P4.Pz());
                         Pi1_Eta = std::abs(Pi1_P4.Eta());
                         Pi2_Eta = std::abs(Pi2_P4.Eta());
                         Pi1_mu1_DeltaR = Pi1_P4.DeltaR(mu1_P4);
@@ -322,8 +330,8 @@ void DataP::Loop(TString outputname)
                         Pi1_mu2_DeltaR = Pi1_P4.DeltaR(mu2_P4);
                         Pi2_mu2_DeltaR = Pi2_P4.DeltaR(mu2_P4);
                         Pi_Pi_DeltaR = Pi1_P4.DeltaR(Pi2_P4);
-                        Jpsi1_Pt = Jpsi1_P4.Pt();
-                        Jpsi1_Pz = Jpsi1_P4.Pz();
+                        Jpsi1_Pt = fabs(Jpsi1_P4.Pt());
+                        Jpsi1_Pz = fabs(Jpsi1_P4.Pz());
                         Jpsi1_Eta = std::abs(Jpsi1_P4.Eta());
                         Jpsi1_massErr = (*X_Jpsi1_massErr)[l];
                         Jpsi1_VtxProb = (*X_Jpsi1_VtxProb)[l];
@@ -331,8 +339,8 @@ void DataP::Loop(TString outputname)
                         Jpsi1_mu2_DeltaR = Jpsi1_P4.DeltaR(mu2_P4);
                         Jpsi1_Pi1_DeltaR = Jpsi1_P4.DeltaR(Pi1_P4);
                         Jpsi1_Pi2_DeltaR = Jpsi1_P4.DeltaR(Pi2_P4);
-                        Psi2S_Pt = Psi2S_P4.Pt();
-                        Psi2S_Pz = Psi2S_P4.Pz();
+                        Psi2S_Pt = fabs(Psi2S_P4.Pt());
+                        Psi2S_Pz = fabs(Psi2S_P4.Pz());
                         Psi2S_Eta = std::abs(Psi2S_P4.Eta());
                         Psi2S_massErr = (*X_JPiPi_massErr)[l];
                         Psi2S_VtxProb = (*X_JPiPi_VtxProb)[l];

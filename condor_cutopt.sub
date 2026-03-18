@@ -2,13 +2,13 @@
 # This should only be used when the EP and AP shares the same file system
 executable		= cutopt.sh
 
-transfer_input_files	= CutOpt.C, DrawGraph.h
+transfer_input_files	= CutOpt.C, DrawGraph.h, FindBestCut.C
 #output                  = $(Process).o
 error                   = error/CutOpt/$(Process).err
 should_transfer_files	= IF_NEEDED
 when_to_transfer_output	= ON_EXIT
 
-request_cpus		= 1
+request_cpus		= 48
 request_memory		= 512M
 request_disk		= 256M
 rank                = TotalCpus

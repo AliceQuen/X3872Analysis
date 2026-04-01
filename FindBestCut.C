@@ -64,7 +64,7 @@ public:
     }
     CutPoint operator+(const CutPoint &other) const;
     static std::vector<CutPoint> combine_points(std::vector<CutPoint> cuts1, std::vector<CutPoint> cuts2);
-    void PrintCuts();
+    void PrintCuts() const;
     RooDataSet *CuttedData(TChain &tree);
 };
 CutPoint::CutPoint(std::string line, bool from_file = true)
@@ -119,7 +119,7 @@ std::vector<CutPoint> CutPoint::combine_points(std::vector<CutPoint> cuts1, std:
     return result;
 }
 
-void CutPoint::PrintCuts()
+void CutPoint::PrintCuts() const
 {
     for (const auto &cut : cuts)
         std::cout << "Cut: " << cut << "\n";
@@ -223,10 +223,24 @@ void FindBestCut()
         std::cout << "cuts size " << cuts.size() << std::endl;
         std::sort(cuts.begin(), cuts.end(), [](const CutPoint &c1, const CutPoint &c2)
                   { return c1.merit > c2.merit; });
-        for (size_t i = 1; i <= N; i++)
+        /*for (size_t i = 1; i <= N; i++)
         {
             std::cout << "N " << i << " with max meirt " << SumFront(cuts, i) << " min merit " << SumBack(cuts, i) << std::endl;
+        }*/
+        TGraph g;
+        for (const auto &c : cuts)
+        {
+            if (c.merit < 13.6748)
+                c.PrintCuts();
+            g.AddPoint(c.efficiency,c.merit);
         }
+        g.GetXaxis()->SetTitle("efficiency");
+        g.GetYaxis()->SetTitle("merit");
+        g.SetMarkerStyle(20);
+        g.Fit("pol1");
+        TCanvas c;
+        g.Draw("AP");
+        c.SaveAs("merit_dist.pdf");
 
         /*auto combined = cuts;
         for (size_t i = 0; i < NUM_CUT_ITEMS; i++)

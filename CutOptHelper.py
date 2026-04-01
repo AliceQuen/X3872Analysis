@@ -34,7 +34,7 @@ mode = args.mode
 # Change to your settings here
 prifix = '/home/storage0/users/junkaiqin/X3872Analysis'
 jobs = ['2016']
-variables = ['Jpsi1_mass', 'mu1_Pt', 'mu2_Pt', 'mu1_Pz', 'mu2_Pz', 'mu1_Eta', 'mu2_Eta', 'mu1_mu2_DeltaR', 'Pi1_Pt', 'Pi2_Pt', 'Pi1_Pz', 'Pi2_Pz', 'Pi1_Eta', 'Pi2_Eta', 'Pi1_mu1_DeltaR', 'Pi2_mu1_DeltaR', 'Pi1_mu2_DeltaR',
+variables = ['Jpsi1_mass_diff', 'mu1_Pt', 'mu2_Pt', 'mu1_Pz', 'mu2_Pz', 'mu1_Eta', 'mu2_Eta', 'mu1_mu2_DeltaR', 'Pi1_Pt', 'Pi2_Pt', 'Pi1_Pz', 'Pi2_Pz', 'Pi1_Eta', 'Pi2_Eta', 'Pi1_mu1_DeltaR', 'Pi2_mu1_DeltaR', 'Pi1_mu2_DeltaR',
     'Pi2_mu2_DeltaR', 'Pi_Pi_DeltaR', 'Jpsi1_Pt', 'Jpsi1_Pz', 'Jpsi1_Eta', 'Jpsi1_massErr', 'Jpsi1_VtxProb', 'Jpsi1_mu1_DeltaR', 'Jpsi1_mu2_DeltaR',
     'Jpsi1_Pi1_DeltaR', 'Jpsi1_Pi2_DeltaR', 'Psi2S_Eta', 'Psi2S_massErr', 'Psi2S_VtxProb', 'Psi2S_mu1_DeltaR', 'Psi2S_mu2_DeltaR',
     'Psi2S_Pi1_DeltaR', 'Psi2S_Pi2_DeltaR', 'Psi2S_Jpsi1_DeltaR']

@@ -2,6 +2,7 @@
 error/*
 test/*
 output/*
+pdfs/*
 *.log
 *.o
 *.pdf
@@ -9,3 +10,7 @@ output/*
 condor_DATA.sub
 cut_optimization_results.txt
 do_cutopt.sub
+*_C*
+*_h*
+*.root
+test*

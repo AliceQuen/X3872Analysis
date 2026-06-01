@@ -1,10 +1,9 @@
 #include "X3872Utils.h"
-#include <map>
 #include <cctype>
 
 void MergeRootFiles() {
     auto startTime = std::chrono::high_resolution_clock::now();
-    std::string dataPath = "~/runs/JpsiX3872_Result/";
+    std::string dataPath = "~/JpsiX3872Result";
     
     std::cout << "Starting to merge root files from: " << dataPath << std::endl;
     std::vector<std::string> directories;

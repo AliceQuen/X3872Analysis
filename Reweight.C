@@ -7,7 +7,7 @@
 void Reweight(TString data_path, TString mc_path, TString out_path_mc = "mc_weighted.root", TString out_path_data = "data_weighted.root")
 {
     auto sig = DrawSideBand2D(data_path, "mu1_pt", "mu2_pt", "mu1_pt vs mu2_pt", MU1_PT_MIN, MU1_PT_MAX, MU2_PT_MIN, MU2_PT_MAX, "", 100, 100).first;
-    auto mc = DrawGraph2D(mc_path, "mu1_pt", "mu2_pt", "mu1_pt vs mu2_pt", MU1_PT_MIN, MU1_PT_MAX, MU2_PT_MIN, MU2_PT_MAX, 100, 100);
+    auto mc = DrawGraph(mc_path, "mu1_pt", "mu2_pt", "mu1_pt vs mu2_pt", MU1_PT_MIN, MU1_PT_MAX, MU2_PT_MIN, MU2_PT_MAX, "", 100, 100);
     
     // Reweight MC with multi-threading
     int nthreads = std::thread::hardware_concurrency();

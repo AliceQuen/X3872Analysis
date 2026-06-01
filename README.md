@@ -96,7 +96,7 @@ All auxiliary functions are collected in this header file for maximum reusabilit
 - `GetTree(TString path)` - Creates chain and initializes tree processor
 
 ### Statistical Utilities
-- `Statics(ROOT::TTreeProcessorMT *tp, TString variable, std::function<bool(float)> selection)` - Calculates statistics (mean, sigma, min, max)
+- `Statistics(ROOT::TTreeProcessorMT *tp, TString variable, std::function<bool(float)> selection)` - Calculates statistics (mean, sigma, min, max)
 - `AutoRange(...)` - Automatically determines histogram range as [μ-3σ, μ+3σ]
 - `Median`, `MedianAbsoluteDiff`, `SavitzkyGolay` - Smoothing utilities
 

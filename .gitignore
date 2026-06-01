@@ -7,7 +7,7 @@ pdfs/*
 *.o
 *.pdf
 *.png
-condor_DATA.sub
+*.sub
 cut_optimization_results.txt
 do_cutopt.sub
 *_C*

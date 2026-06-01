@@ -16,7 +16,9 @@
 #include "RooFitResult.h"
 
 #include "X3872Utils.h"
-#include "FindBestCut.C"
+#include <TGraph.h>
+#include <cstddef>
+#include <cstdio>
 
 #define PSI2S_MASS_MIN 3.6
 #define PSI2S_MASS_MAX 3.76
@@ -28,14 +30,8 @@ struct Work
 {
     double cut;
     RooDataSet *data;
-};
-
-struct Result
-{
-    double cut;
-    double merit;
-    double n;
-    unsigned int fit;
+    Work() : cut(0.0), data(nullptr) {}
+    Work(double c, RooDataSet *d) : cut(c), data(d) {}
 };
 
 Result Fit(Work work, bool isDraw = false)
@@ -76,9 +72,9 @@ Result Fit(Work work, bool isDraw = false)
             std::cout << ii << " " << Data_edm << " " << Data_status << " " << Data_covQual << std::endl;
         }
         ii = ii + 1;
+        delete fitRes;
         if ((Data_edm < 0.01 && Data_status == 0 && Data_covQual == 3) || ii >= 10)
             break;
-        delete fitRes;
     }
     if (isDraw)
     {
@@ -109,26 +105,37 @@ Result Fit(Work work, bool isDraw = false)
     }
 
     Result r = {work.cut, m, data->sumEntries(), ii};
-    delete data, fitRes;
     return r;
 }
 
-void CutOpt(TString path, TString variable)
+void CutOpt(TString path, TString variable, double x = 500, double max_ = 0, double min_ = 0, bool min_or_max_ = true, unsigned int k_smooth = 21, bool isDraw = false)
 {
     auto start = std::chrono::high_resolution_clock::now();
-    std::string full_cuts = "Psi2s_mass > " + std::to_string(PSI2S_MASS_MIN) + ", Psi2s_mass < " + std::to_string(PSI2S_MASS_MAX);
-    TChain *SourceTree = GetTree<TChain>(path, full_cuts);
+    std::string full_cuts = "std::isfinite(Psi2S_VtxProb) && Psi2S_massErr >= 0 && Psi2S_mass > " + std::to_string(PSI2S_MASS_MIN) + " && Psi2S_mass < " + std::to_string(PSI2S_MASS_MAX);
+    TTree *SourceTree = GetTree<TTree>(path, full_cuts);
     unsigned int entries = SourceTree->GetEntries();
-    if (entries == 0)
+    auto total = entries;
+    if (entries == 0) {
+        delete SourceTree;  
         throw std::runtime_error("No ROOT files found in the specified path: ");
+    }
     ROOT::TTreeProcessorMT *tp = GetTree(*SourceTree);
     auto range = AutoRange(tp, variable);
-    double min = range.first;
-    double max = range.second;
-    auto hs_side_band = DrawSideBand(tp, variable, variable, min, max);
-    auto h_psi2s_mass = DrawGraph(tp, variable, variable, PSI2S_MASS_MIN, PSI2S_MASS_MAX, 500);
-    auto total = h_psi2s_mass->GetEntries();
-    bool min_or_max = (hs_side_band.first->GetMean() - hs_side_band.second->GetMean() > 0);
+    double min = min_;
+    double max = max_;
+    if (min_ == 0 && max_ == 0)
+    {
+        min = range.first;
+        max = range.second;
+    }
+   
+    bool min_or_max = min_or_max_;
+    if (min_ == 0 && max_ == 0)
+    {
+        auto hs_side_band = DrawSideBand(path, variable, variable, min, max);
+        min_or_max = (hs_side_band.first->GetMean() - hs_side_band.second->GetMean() > 0);
+    }
+    delete tp;
 
     RooRealVar Psi2S_mass("Psi2S_mass", "M(#mu#mu#pi#pi)-M(#mu#mu)+3.0969 GeV", PSI2S_MASS_MIN, PSI2S_MASS_MAX);
     RooRealVar roovar(variable, variable, -std::numeric_limits<double>::max(), std::numeric_limits<double>::max());
@@ -136,10 +143,14 @@ void CutOpt(TString path, TString variable)
     variables.add(Psi2S_mass);
     variables.add(roovar);
     RooDataSet *data = new RooDataSet("data", "Psi2S_mass", variables, RooFit::Import(*SourceTree));
+    Work work;
+    work.cut = 0.0;
+    work.data = data;
+    auto r = Fit(work);
     ROOT::TProcessExecutor pool;
     std::vector<Work> works;
-    double x = 100;
     double d = (max - min) / x;
+
     if (min_or_max)
     {
         for (auto i = 1; i <= x; i++)
@@ -147,7 +158,7 @@ void CutOpt(TString path, TString variable)
             TString cut = variable + ">" + TString(std::to_string(max - d * i));
             std::string name = "Psi2S_mass_min_" + std::to_string(i);
             RooDataSet *data_ = new RooDataSet(name.c_str(), "Psi2S_mass", variables, RooFit::Cut(cut), RooFit::Import(*data));
-            works.push_back({max - d * i, data_});
+            works.emplace_back(max - d * i, data_);
         }
     }
     else
@@ -157,17 +168,34 @@ void CutOpt(TString path, TString variable)
             TString cut = variable + "<" + TString(std::to_string(min + d * i));
             std::string name = "Psi2S_mass_min_" + std::to_string(i);
             RooDataSet *data_ = new RooDataSet(name.c_str(), "Psi2S_mass", variables, RooFit::Cut(cut), RooFit::Import(*data));
-            works.push_back({min + d * i, data_});
+            works.emplace_back(min + d * i, data_);
         }
     }
+    delete data;
     auto results = pool.Map([](Work work) -> Result
                             { return Fit(work); }, works);
-
-    auto report = FindBestCut(results);
+    auto report = FindBestCut(results, r.merit, k_smooth);
+    if (isDraw)
+    {
+        std::cout << "[INFO] isDraw is set to true" << std::endl;
+        TGraph* gr = new TGraph(results.size());
+        for (size_t i = 0; i < results.size(); ++i) {
+            gr->SetPoint(i, results[i].cut, results[i].merit);
+        }
+        TCanvas c;
+        gr->Draw();
+        c.SaveAs("cut_optimization.pdf");
+        c.Close();
+        delete gr;
+    }
+    delete SourceTree;
+    for (auto &work : works) {
+        delete work.data;
+    }
     works.clear();
-    std::ofstream out;
-
-    out.open("/home/storage0/users/junkaiqin/X3872Analysis/cut_optimization_results.txt", std::ios::out | std::ios::app);
+    if (report.merit < 0)
+        return;
+    
     std::string cut;
     if (min_or_max)
     {
@@ -177,10 +205,15 @@ void CutOpt(TString path, TString variable)
     {
         cut = TString(std::to_string(report.cut)) + ">" + variable;
     }
-    out << path << "," << cut << "," << report.merit << "," << report.n / total << std::endl;
+    if (!isDraw)
+    {
+        std::ofstream out;
+        out.open("/home/storage29/users/junkaiqin/X3872Analysis/cut_optimization_results.txt", std::ios::out | std::ios::app);
+        out << path << "," << cut << "," << report.merit << "," << report.n / total << std::endl;
+    }else{
+        std::cout << path << "," << cut << "," << report.merit << "," << report.n / total << std::endl;
+    }
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
     std::cout << "Total time taken: " << elapsed.count() << " seconds" << std::endl;
-    delete tp;
-    delete SourceTree;
 }

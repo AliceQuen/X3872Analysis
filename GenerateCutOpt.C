@@ -4,13 +4,67 @@
 #include <vector>
 #include <string>
 
+bool AskUserAndHandleVariables(std::vector<std::string>& variables, const std::string& varListFile, TTree* SourceTree, const std::vector<std::string>& excludedVars)
+{
+    char userChoice = 'n';
+    std::cout << std::endl << "[QUESTION] Do you want to use the variables from this file? (y/n): ";
+    std::cin >> userChoice;
+
+    if (userChoice != 'y' && userChoice != 'Y') {
+        std::cout << std::endl << "[INFO] User chose not to use existing variable list" << std::endl;
+        std::cout << "Please select an option:" << std::endl;
+        std::cout << "  1. Regenerate variable list from SourceTree (overwrites existing varlist.txt)" << std::endl;
+        std::cout << "  2. Manually edit the existing varlist.txt file and continue" << std::endl;
+
+        int option = 0;
+        std::cout << std::endl << "Enter your choice (1 or 2): ";
+        std::cin >> option;
+
+        if (option == 1) {
+            std::cout << std::endl << "[INFO] Regenerating variable list from SourceTree..." << std::endl;
+            variables = GetVariableListFromTree(SourceTree, excludedVars);
+            std::cout << "[INFO] Found " << variables.size() << " variables:" << std::endl;
+            for (const auto &var : variables) {
+                std::cout << "  - " << var << std::endl;
+            }
+
+            std::ofstream outVarList(varListFile);
+            if (!outVarList.is_open()) {
+                std::cerr << "[ERROR] Cannot write to varlist.txt" << std::endl;
+                return false;
+            }
+            for (const auto &var : variables) {
+                outVarList << var << std::endl;
+            }
+            outVarList.close();
+            std::cout << "[INFO] Successfully regenerated varlist.txt with " << variables.size() << " variables" << std::endl;
+        }
+        else if (option == 2) {
+            std::cout << std::endl << "[INFO] Please manually edit varlist.txt and run again" << std::endl;
+            std::cout << "[INFO] Current variables will be used for condor script generation" << std::endl;
+            if (variables.empty()) {
+                std::cerr << "[ERROR] No variables in varlist.txt after manual editing" << std::endl;
+                return false;
+            }
+        }
+        else {
+            std::cerr << "[ERROR] Invalid option. Please enter 1 or 2" << std::endl;
+            return false;
+        }
+    }
+    else {
+        std::cout << "[INFO] Using existing variable list from varlist.txt" << std::endl;
+    }
+    return true;
+}
+
 void GenerateCutOpt(TString dataPath, TString outputScript = "condor_cutopt.sub")
 {
     // excluded variables
     // exclude Psi2S_mass
-    const std::vector<std::string> excludedVars = {"Psi2S_mass"};
+    const std::vector<std::string> excludedVars = {"Psi2S_mass", "X_.*", "Jpsi2_.*", ".*charge"};
     // prefix for condor submission script, that is the path to the analysis directory
-    std::string prefix = "/home/storage0/users/junkaiqin/X3872Analysis";
+    std::string prefix = "/home/storage29/users/junkaiqin/X3872Analysis";
     // to edit the condor script content, see "condor submission script content" in this file
 
     std::cout << "==============================================" << std::endl;
@@ -19,11 +73,11 @@ void GenerateCutOpt(TString dataPath, TString outputScript = "condor_cutopt.sub"
     std::cout << "Output script: " << outputScript << std::endl;
     std::cout << "==============================================" << std::endl << std::endl;
 
-    TChain *SourceTree = nullptr;
+    TTree *SourceTree = nullptr;
     try {
-        SourceTree = GetTree<TChain>(dataPath);
+        SourceTree = GetTree<TTree>(dataPath);
     } catch (const std::exception &e) {
-        std::cerr << "[ERROR] Failed to get TChain: " << e.what() << std::endl;
+        std::cerr << "[ERROR] Failed to get TTree: " << e.what() << std::endl;
         return;
     }
 
@@ -63,57 +117,9 @@ void GenerateCutOpt(TString dataPath, TString outputScript = "condor_cutopt.sub"
         std::cout << "----------------------------------------" << std::endl;
         std::cout << "[INFO] Total variables read: " << variables.size() << std::endl;
 
-        char userChoice = 'n';
-        std::cout << std::endl << "[QUESTION] Do you want to use the variables from this file? (y/n): ";
-        std::cin >> userChoice;
-
-        if (userChoice != 'y' && userChoice != 'Y') {
-            std::cout << std::endl << "[INFO] User chose not to use existing variable list" << std::endl;
-            std::cout << "Please select an option:" << std::endl;
-            std::cout << "  1. Regenerate variable list from SourceTree (overwrites existing varlist.txt)" << std::endl;
-            std::cout << "  2. Manually edit the existing varlist.txt file and continue" << std::endl;
-
-            int option = 0;
-            std::cout << std::endl << "Enter your choice (1 or 2): ";
-            std::cin >> option;
-
-            if (option == 1) {
-                std::cout << std::endl << "[INFO] Regenerating variable list from SourceTree..." << std::endl;
-                variables = GetVariableListFromTree(SourceTree, excludedVars);
-                std::cout << "[INFO] Found " << variables.size() << " variables:" << std::endl;
-                for (const auto &var : variables) {
-                    std::cout << "  - " << var << std::endl;
-                }
-
-                std::ofstream outVarList(varListFile);
-                if (!outVarList.is_open()) {
-                    std::cerr << "[ERROR] Cannot write to varlist.txt" << std::endl;
-                    delete SourceTree;
-                    return;
-                }
-                for (const auto &var : variables) {
-                    outVarList << var << std::endl;
-                }
-                outVarList.close();
-                std::cout << "[INFO] Successfully regenerated varlist.txt with " << variables.size() << " variables" << std::endl;
-            }
-            else if (option == 2) {
-                std::cout << std::endl << "[INFO] Please manually edit varlist.txt and run again" << std::endl;
-                std::cout << "[INFO] Current variables will be used for condor script generation" << std::endl;
-                if (variables.empty()) {
-                    std::cerr << "[ERROR] No variables in varlist.txt after manual editing" << std::endl;
-                    delete SourceTree;
-                    return;
-                }
-            }
-            else {
-                std::cerr << "[ERROR] Invalid option. Please enter 1 or 2" << std::endl;
-                delete SourceTree;
-                return;
-            }
-        }
-        else {
-            std::cout << "[INFO] Using existing variable list from varlist.txt" << std::endl;
+        if (!AskUserAndHandleVariables(variables, varListFile, SourceTree, excludedVars)) {
+            delete SourceTree;
+            return;
         }
     }
     else {
@@ -134,7 +140,14 @@ void GenerateCutOpt(TString dataPath, TString outputScript = "condor_cutopt.sub"
             outVarList << var << std::endl;
         }
         outVarList.close();
-        std::cout << "[INFO] Successfully generated varlist.txt with " << variables.size() << " variables" << std::endl;
+        std::cout << "[INFO] Successfully generated varlist.txt with " << variables.size() << " variables in SourceTree" << std::endl;
+        std::cout << "----------------------------------------" << std::endl;
+        std::cout << "[INFO] Total variables: " << variables.size() << std::endl;
+
+        if (!AskUserAndHandleVariables(variables, varListFile, SourceTree, excludedVars)) {
+            delete SourceTree;
+            return;
+        }
     }
 
     if (variables.empty()) {
@@ -145,31 +158,8 @@ void GenerateCutOpt(TString dataPath, TString outputScript = "condor_cutopt.sub"
 
     std::cout << std::endl << "[INFO] Generating condor submission script..." << std::endl;
 
-    std::vector<std::string> jobs;
+    std::vector<std::string> jobs = {"roots/2016_merged.root", "roots/2017_merged.root", "roots/2018_merged.root"};
 
-    TFile *file = TFile::Open(dataPath.Data());
-    if (!file || file->IsZombie()) {
-        std::cerr << "[WARNING] Cannot open file to extract directory info: " << dataPath << std::endl;
-        jobs.push_back("unknown");
-    } else {
-        file->Close();
-        delete file;
-
-        std::string pathStr = std::string(dataPath.Data());
-        size_t lastSlash = pathStr.find_last_of('/');
-        if (lastSlash != std::string::npos) {
-            std::string dirName = pathStr.substr(0, lastSlash);
-            size_t prevSlash = dirName.find_last_of('/');
-            if (prevSlash != std::string::npos) {
-                std::string jobName = dirName.substr(prevSlash + 1);
-                jobs.push_back(jobName);
-            } else {
-                jobs.push_back(dirName);
-            }
-        } else {
-            jobs.push_back("unknown");
-        }
-    }
 
     std::ofstream outFile;
     outFile.open(outputScript.Data());
@@ -179,24 +169,22 @@ void GenerateCutOpt(TString dataPath, TString outputScript = "condor_cutopt.sub"
         return;
     }
     // condor submission script content
-    outFile << "universe = vanilla" << std::endl;
-    outFile << "executable = " << prefix << "/cutopt.sh" << std::endl;
-    outFile << "arguments = $(Process)" << std::endl;
-    outFile << "output = " << prefix << "/output/condor/$(ClusterId).$(Process).out" << std::endl;
-    outFile << "error = " << prefix << "/output/condor/$(ClusterId).$(Process).err" << std::endl;
-    outFile << "log = " << prefix << "/output/condor/$(ClusterId).log" << std::endl;
-    outFile << "requirements = (OpSys == " << "LINUX" << ")" << std::endl;
-    outFile << "request_cpus = 1" << std::endl;
-    outFile << "request_memory = 4096 MB" << std::endl;
-    outFile << "notification = Error" << std::endl;
-    outFile << "queue 1 matching files" << std::endl;
+    outFile << "executable          =" << prefix << "/cutopt.sh" << std::endl;
+    outFile << "output              = " << prefix << "/output/cutopt/$(ClusterId)_$(Process).out" << std::endl;
+    outFile << "error               = " << prefix << "/error/cutopt/$(ClusterId)_$(Process).err" << std::endl;
+    outFile << "log                 = " << prefix << "/cutopt.log" << std::endl;
+    outFile << "request_cpus        = 48" << std::endl;
+    outFile << "request_memory      = 1024 MB" << std::endl;
+    outFile << "request_disk        = 256 MB" << std::endl;
+    outFile << "rank                = TotalCpus" << std::endl;
+    outFile << "queue arguments from (" << std::endl;
 
     for (const auto &job : jobs) {
         for (const auto &var : variables) {
-            outFile << "\t" << prefix << "/output/DATA/" << job << " " << var << std::endl;
+            outFile << "\t" << prefix << "/" << job << " " << var << std::endl;
         }
     }
-
+    outFile << ")" << std::endl;
     outFile.close();
 
     std::cout << "[INFO] Successfully generated condor submission script" << std::endl;

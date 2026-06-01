@@ -2,11 +2,9 @@
 #include "X3872Utils.h"
 #include <cstdlib>
 #include <iostream>
-#include <map>
 #include <string>
 #include <fstream>
 #include <vector>
-#include <stdexcept>
 
 #include "TMVA/Factory.h"
 #include "TMVA/DataLoader.h"
@@ -14,18 +12,23 @@
 #include "TMVA/Tools.h"
 #include "TMVA/TMVAGui.h"
 
-void Train(TString sig_path, TString bkg_path, TString output_dir = "/home/storage0/users/junkaiqin/TMVA-Cut-Optimization/modeltest/", bool batch = false)
+
+
+void Train(TString sig_path, TString bkg_path, TString output_dir, bool batch = false)
 {
 	TMVA::Tools::Instance();
 	TMVA::Config::Instance().fIONames.fWeightFileDirPrefix = output_dir;
 
-	TChain *SigTree = GetTree<TChain>(sig_path, "");
-	TChain *BkgTree = GetTree<TChain>(bkg_path, "");
+	TString sigcut = TString(PeakSelectionCut) + " && std::isfinite(Psi2S_VtxProb)";
+	TString bkgcut = TString(SideBandSelectionCut) + " && std::isfinite(Psi2S_VtxProb)";
+		
+	TTree *SigTree = GetTree<TTree>(sig_path, sigcut, "sig.root");
+	TTree *BkgTree = GetTree<TTree>(bkg_path, bkgcut, "bkg.root");
 
 	std::cout << "sig " << SigTree->GetEntries() << " bkg " << BkgTree->GetEntries() << std::endl;
 
 	std::string job_name = "cutopt";
-	TString output_file = TString(output_dir) + "result/cutopt.root";
+	TString output_file = TString(output_dir) + "/cutopt.root";
 	TFile *OutputFile = TFile::Open(output_file, "RECREATE");
 	TMVA::Factory *Factory = new TMVA::Factory(job_name.c_str(), OutputFile,
 	"!V:!Silent:Color:DrawProgressBar:Transformations=I:AnalysisType=Classification");
@@ -91,7 +94,6 @@ void Train(TString sig_path, TString bkg_path, TString output_dir = "/home/stora
 				}
 				else if (option == 2) {
 					std::cout << std::endl << "[INFO] Please manually edit varlist.txt and run again" << std::endl;
-					std::cout << "[INFO] Current variables will be used for training" << std::endl;
 					if (variables.empty()) {
 						std::cerr << "[ERROR] No variables in varlist.txt after manual editing" << std::endl;
 						delete SigTree;
@@ -111,6 +113,12 @@ void Train(TString sig_path, TString bkg_path, TString output_dir = "/home/stora
 					delete OutputFile;
 					return;
 				}
+				delete SigTree;
+				delete BkgTree;
+				delete Factory;
+				delete DataLoader;
+				delete OutputFile;
+				return;
 			}
 			else {
 				std::cout << "[INFO] Using existing variable list from varlist.txt" << std::endl;
@@ -156,10 +164,10 @@ void Train(TString sig_path, TString bkg_path, TString output_dir = "/home/stora
 		DataLoader->AddVariable(var, 'D');
 	}
 
-	DataLoader->AddSpectator("TMVA_Mark", 'F');
+	//DataLoader->AddSpectator("TMVA_Mark", 'F');
 	DataLoader->AddSignalTree(SigTree, 1);
 	DataLoader->AddBackgroundTree(BkgTree, 1);
-	DataLoader->PrepareTrainingAndTestTree("", "", "nTrain_Signal=100000:nTest_Signal=1000:nTrain_Background=100000:nTest_Background=1000:SplitMode=Random:NormMode=NumEvents:!V");
+	DataLoader->PrepareTrainingAndTestTree("", "", "nTrain_Signal=10000:nTest_Signal=1000:nTrain_Background=10000:nTest_Background=1000:SplitMode=Random:NormMode=NumEvents:!V");
 
     TString layoutString ("Layout=TANH|128,TANH|128,TANH|128,LINEAR");
     TString trainingStrategyString = ("TrainingStrategy=LearningRate=1e-3,Momentum=0.9,"

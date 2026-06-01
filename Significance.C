@@ -1,9 +1,4 @@
-#include <limits.h>
-#include <iostream>
-#include <fstream>
-#include <sstream>
 #include "TMath.h"
-#include "X3872Utils.h"
 #include "RooRealVar.h"
 #include "RooStats/SPlot.h"
 #include "RooStats/RooStatsUtils.h"
@@ -17,24 +12,24 @@
 #include "RooExtendPdf.h"
 #include "RooPlot.h"
 #include "RooFitResult.h"
-#include "RooProdPdf.h"
 #include "RooProduct.h"
 #include "RooCBShape.h"
-#include "TSystem.h"
 #include "RooFitResult.h"
 
-#include "TCanvas.h"
-#include "TROOT.h"
-#include "TStyle.h"
 #include "TLegend.h"
-#include "TAxis.h"
-#include "TChain.h"
 
-#include "TGraph.h"
+#include "X3872Utils.h"
 
-#define RANGE_MIN 3.60
-#define RANGE_MAX 3.76
-#define MUMUPIPI_M 3.686e+00
+
+/*#define RANGE_MIN 3.66
+#define RANGE_MAX 3.72
+
+#define MUMUPIPI_M 3.686e+00*/
+
+#define RANGE_MIN 3.85
+#define RANGE_MAX 3.9
+
+#define MUMUPIPI_M 3.872e+00
 
 using namespace std;
 using namespace RooFit;
@@ -46,16 +41,18 @@ double Fit(RooDataSet *data, bool isBkg, unsigned int Nnorm)
 	Psi2S_mass.setRange("fullRange", RANGE_MIN, RANGE_MAX);
 
 	RooRealVar mean = RooRealVar("mean", "mean", MUMUPIPI_M, RANGE_MIN, RANGE_MAX);
-	RooRealVar sigma1 = RooRealVar("sigma1", "sigma1", 0.0025, 0.001, 0.009);
-	RooRealVar sigma2 = RooRealVar("sigma2", "sigma2", 0.0025, 0.001, 0.009);
+	mean.setConstant(kTRUE);
+	RooRealVar sigma1 = RooRealVar("sigma1", "sigma1", 0.0025, 0.0, 0.06);
+	RooRealVar sigma2 = RooRealVar("sigma2", "sigma2", 0.0025, 0.0, 0.06);
 
 	RooRealVar frac("frac", "frac", 0.5);
 	RooGaussian sigPdf1 = RooGaussian("sigPdf1", "sigPdf1", Psi2S_mass, mean, sigma1);
 	RooGaussian sigPdf2 = RooGaussian("sigPdf2", "sigPdf2", Psi2S_mass, mean, sigma2);
 	RooAddPdf sigPdf("sigPdf", "sigPdf", RooArgList(sigPdf1, sigPdf2), frac);
-	RooRealVar a0 = RooRealVar("a0", "a0", 10.0, 0.0, 3000.0);
-	RooRealVar a1 = RooRealVar("a1", "a1", -0.10, -3000, 3000);
-	RooChebychev chbPdf = RooChebychev("bkg", "bkg", Psi2S_mass, RooArgList(a0, a1));
+    RooRealVar c1_bkg("c1_bkg", "c1_bkg", 2.24023e-01, -0.8, 0.8);
+    RooRealVar c2_bkg("c2_bkg", "c2_bkg", -1.64660e-02, -0.6, 0.6);
+    RooRealVar c3_bkg("c3_bkg", "c3_bkg", 1.18262e-02, -0.07, 0.07);
+	RooChebychev chbPdf = RooChebychev("bkg", "bkg", Psi2S_mass, RooArgList(c1_bkg, c2_bkg, c3_bkg));
 	RooRealVar norm("norm", "norm", Nnorm);
 
 	RooExtendPdf bkgPdf("bkgPdf", "bkgPdf", chbPdf, norm);
@@ -114,7 +111,7 @@ double Fit(RooDataSet *data, bool isBkg, unsigned int Nnorm)
 
 void Significance(TString path, std::string cut="")
 {
-	TChain *SourceTree = GetTree<TChain>(path, cut);
+	TTree *SourceTree = GetTree<TTree>(path, cut);
 	if (!SourceTree->GetEntries()) {
 		delete SourceTree;
 		throw std::runtime_error("Error: Fail to read data tree");
